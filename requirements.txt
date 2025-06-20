@@ -1,0 +1,13 @@
+Django>=4.2
+djangorestframework
+psycopg2-binary
+celery[redis]
+redis
+gunicorn
+pytz
+drf_yasg
+whitenoise
+black
+drf_spectacular
+python-decouple
+dj-database-url

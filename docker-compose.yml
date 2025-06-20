@@ -1,0 +1,63 @@
+version: "3.9"
+
+services:
+  django:
+    build: .
+    container_name: realmate_challenge_django
+    command: >
+      sh -c "
+      sleep 10 &&
+      python manage.py migrate &&
+      echo \"from django.contrib.auth import get_user_model;
+      User = get_user_model();
+      User.objects.filter(username='admin').exists() or
+      User.objects.create_superuser('admin', 'admin@example.com', 'admin123')\" | python manage.py shell &&
+      gunicorn realmate_challenge.wsgi:application --bind 0.0.0.0:8000"
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=realmate_challenge.settings
+      - PYTHONPATH=/app
+
+  celery:
+    build: .
+    container_name: realmate_challenge_celery
+    command: celery -A realmate_challenge.celery_app worker --loglevel=info
+    volumes:
+      - .:/app
+    depends_on:
+      - django
+      - redis
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=realmate_challenge.settings
+      - PYTHONPATH=/app
+
+  redis:
+    image: redis:7-alpine
+    container_name: realmate_challenge_redis
+    ports:
+      - "6379:6379"
+
+  db:
+    image: postgres:15-alpine
+    container_name: realmate_challenge_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+
+volumes:
+  postgres_data:
