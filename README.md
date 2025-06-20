@@ -13,27 +13,33 @@ Desenvolver uma web API utilizando Django Rest Framework que receba eventos de c
 # 📌 Requisitos
 
 1. **Criar dois modelos principais no Django:**
+
    - Conversation
    - Message (relacionado a Conversation)
 
 2. **Endpoint principal:**
+
    - POST `/webhook/`
    - Recebe eventos JSON (descritos abaixo)
    - Valida payloads e retorna códigos HTTP apropriados
 
 3. **Endpoint de consulta:**
+
    - GET `/conversations/{id}/`
    - Retorna detalhes da conversa:
      - `id`, `status`, `created_at`, `updated_at`
      - Lista de mensagens associadas (campos: `id`, `type`, `content`, `timestamp`)
 
 4. **Banco de dados:**
+
    - PostgreSQL (rodando em container Docker)
 
 5. **Broker/Cache para Celery:**
+
    - Redis (rodando em container Docker)
 
 6. **Processamento assíncrono:**
+
    - Celery executando tasks de processamento de mensagens
 
 7. **Docker & Docker Compose:**
@@ -50,6 +56,7 @@ Desenvolver uma web API utilizando Django Rest Framework que receba eventos de c
 A API receberá eventos via POST em /webhook/, com JSON nos formatos:
 
 ## 1. NEW_CONVERSATION
+
 Cria uma nova conversa (estado inicial: `OPEN`).
 
 ```json
@@ -63,6 +70,7 @@ Cria uma nova conversa (estado inicial: `OPEN`).
 ```
 
 ## 2. NEW_MESSAGE
+
 Nova mensagem enviada por usuário (sempre `type`: `USER`).
 
 ```json
@@ -78,6 +86,7 @@ Nova mensagem enviada por usuário (sempre `type`: `USER`).
 ```
 
 ## 3. CLOSE_CONVERSATION
+
 Fecha a conversa (estado passa a CLOSED).
 
 ```json
@@ -95,10 +104,12 @@ Fecha a conversa (estado passa a CLOSED).
 # 📌 Regras de Negócio
 
 ## 1. Estados de Conversation
+
 - Ao criar, status = OPEN.
 - Depois de fechado, status = CLOSED; conversas fechadas não aceitam novas mensagens (NEW_MESSAGE retorna HTTP 400).
 
 ## 2. Mensagens (Message)
+
 - **Tipos permitidos:**
   - "INBOUND": mensagens recebidas pela API/Webhook (payload)
   - "OUTBOUND": gerado internamente pela aplicação
@@ -111,6 +122,7 @@ Fecha a conversa (estado passa a CLOSED).
   - campos adicionais a seu critério, se achar necessário.
 
 ## 3. Retorno dos endpoints
+
 - Payloads inválidos (formato incorreto, regras de negócio violadas) devem retornar `HTTP 400 Bad Request`
 - Payloads de mensagem válidos devem retornar `HTTP 202 Accepted` e iniciar o processamento assíncrono via Celery task
 - Retornos esperados:
@@ -127,13 +139,14 @@ Fecha a conversa (estado passa a CLOSED).
     - 200 OK (sucesso, retorna JSON da conversa)
     - 404 Not Found (não existe)
 
-
 ## 4. Mensagens fora de ordem
+
 - A aplicação deve tolerar uma breve falta de sincronia no recebimento de webhooks
   - Por exemplo, uma NEW_MESSAGE que faz referência a uma `Conversation` que ainda não foi criada, pois o NEW_CONVERSATION ainda não chegou
   - O limite deve ser de, no máximo, 6 segundos
 
 **Exemplo de tempos:**
+
 - T=0s: Chega NEW_MESSAGE (`id=abc`) para `conversation_id=123`
 - T=2s: Chega NEW_CONVERSATION com `id=123` (dentro do limite de 6s)
 - T=7s: Chega NEW_MESSAGE (`id=dce`) para `conversation_id=456`
@@ -142,9 +155,11 @@ Fecha a conversa (estado passa a CLOSED).
 - Neste cenário, a mensagem com id `abc` deverá ser incluída na conversa com id `123` e ser processada normalmente. Porém, a mensagem com id `dce` é inválida e não deveria ser processada, pois ultrapassou o período limite de tolerância de 6s.
 
 ## 5. Processamento de múltiplas mensagens do usuário
+
 - Na vida real, seres humanos podem "quebrar" a sua comunicação em várias mensagens
 
 - **Exemplo de fluxo**:
+
   - T=0s: "Oi!"
   - T=2s: "Estou buscando uma casa"
   - T=4s: "Com 2 quartos para morar!"
@@ -153,6 +168,7 @@ Fecha a conversa (estado passa a CLOSED).
 - Porém, caso o usuário envie várias mensagens em sequência rápida (intervalo de até 5 segundos entre elas), essas mensagens devem ser agrupadas e processadas juntamente, gerando apenas uma mensagem (type `OUTBOUND`).
 
 Ou seja:
+
 - Quando um usuário enviar UMA mensagem, deve ser processada sozinha.
 - Se o usuário enviar várias mensagens em sequência rápida (intervalo de até 5 segundos entre elas), essas mensagens devem ser agrupadas em um único job assíncrono, evitando múltiplas respostas redundantes.
 
@@ -177,9 +193,11 @@ A resposta `OUTBOUND` deve conter um **conteúdo (`content`) padrão que lista o
 **Caso 1 – Mensagem única**
 
 Se a aplicação receber uma única mensagem INBOUND no período de 5s com o `id`:
+
 - 55ebb68a-a8ef-47d4-9a28-c97e0f0ec8f1
 
 A mensagem `OUTBOUND` gerada deverá ter o seguinte conteúdo:
+
 ```python
 """Mensagens recebidas:
 55ebb68a-a8ef-47d4-9a28-c97e0f0ec8f1
@@ -189,9 +207,10 @@ A mensagem `OUTBOUND` gerada deverá ter o seguinte conteúdo:
 **Caso 2 – Múltiplas mensagens agrupadas**
 
 Se a aplicação receber três mensagens INBOUND em sequência rápida (com até 5 segundos entre cada uma), com os seguintes `ids`:
-- 55ebb68a-a8ef-47d4-9a28-c97e0f0ec8f1  
-- 8d41e347-da5f-4d03-8377-4378d86cfcf0  
-- 1f9e918a-6d32-4a75-93a7-34b9e0faff22  
+
+- 55ebb68a-a8ef-47d4-9a28-c97e0f0ec8f1
+- 8d41e347-da5f-4d03-8377-4378d86cfcf0
+- 1f9e918a-6d32-4a75-93a7-34b9e0faff22
 
 A mensagem `OUTBOUND` gerada deverá ter o seguinte conteúdo:
 
@@ -204,6 +223,7 @@ A mensagem `OUTBOUND` gerada deverá ter o seguinte conteúdo:
 ```
 
 ## 7. Fechamento de Conversa
+
 - O evento CLOSE_CONVERSATION marca status = CLOSED.
 
 ---
@@ -220,18 +240,22 @@ Valorizamos entregas além do mínimo!
 # 🚀 Tecnologias e Ferramentas
 
 ## Linguagem/Framework:
+
 - Python 3.10+
 - Django
 - Django Rest Framework
 
 ## Processamento Assíncrono:
+
 - Celery
 - Redis (broker e/ou backend de resultados)
 
 ## Banco de Dados:
+
 - PostgreSQL
 
 ## Containerização:
+
 - Docker
 - docker-compose
 
@@ -253,11 +277,12 @@ Valorizamos entregas além do mínimo!
 
 3. Crie um arquivo INSTRUCTIONS.md com as instruções para rodar o projeto.
 
-
 # 📌 Entrega e Requisitos
 
 ## Envio do link do repositório:
+
 Após concluir, envie o link para tecnologia@realmate.com.br, incluindo no corpo do e-mail:
+
 - Seu nome completo
 - Seu número de WhatsApp
 
@@ -276,4 +301,4 @@ Após concluir, envie o link para tecnologia@realmate.com.br, incluindo no corpo
 
 Caso tenha dúvidas sobre o desafio, entre em contato com nossa equipe de tecnologia pelo WhatsApp!
 
-Boa sorte! 🚀
+Boa sorte! 🚀 (TESTE COMMIT)
