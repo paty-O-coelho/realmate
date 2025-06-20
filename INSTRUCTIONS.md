@@ -27,7 +27,7 @@ Com o .env configurado corretamente, rode:
 - Remover o docker caso necessario
 
 ```docker-compose down --volumes --remove-orphans```
-# ✅ Testes Automatizados
+# ✅ Testes Unitarios
 Para executar os testes unitários:
 
 ```docker-compose exec django python manage.py test conversations```
