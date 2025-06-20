@@ -36,3 +36,7 @@ Para executar os testes unitários:
 - Swagger UI: http://localhost:8000/swagger/
 
 ---
+
+
+![image](https://github.com/user-attachments/assets/7c1a2217-c030-4b8c-af6f-3e10d763ad6e)
+
